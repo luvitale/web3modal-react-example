@@ -41,7 +41,8 @@ import {
   DAI_BALANCE_OF,
   DAI_TRANSFER
 } from "./constants";
-import { callBalanceOf, callTransfer } from "./helpers/web3";
+import { callBalanceOf, callTransfer, getReceivedVotes, vote } from "./helpers/web3";
+import { BFA_MAINNET, BFA_TESTNET } from "./helpers/chains";
 
 const SLayout = styled.div`
   position: relative;
@@ -111,6 +112,30 @@ const STestButton = styled(Button)`
   margin: 12px;
 `;
 
+const VoteButton = styled(Button)`
+  border-radius: 4px;
+  font-size: ${fonts.size.small};
+  height: 32px;
+  width: 100%;
+  max-width: 50px;
+  margin: 12px;
+`;
+
+const candidateName = {
+  "AI": "Artificial Intelligence",
+  "AM": "Additive Manufacturing",
+  "BC": "Blockchain",
+  "BT": "Biotechnology",
+  "IOT": "Internet of Things",
+  "MV": "Metaverse",
+  "RT": "Robotics",
+  "QC": "Quantum Computing" 
+}
+
+interface IVotes {
+  [candidate: string]: number;
+}
+
 interface IAppState {
   fetching: boolean;
   address: string;
@@ -123,6 +148,7 @@ interface IAppState {
   showModal: boolean;
   pendingRequest: boolean;
   result: any | null;
+  votes: IVotes | null;
 }
 
 const INITIAL_STATE: IAppState = {
@@ -136,7 +162,8 @@ const INITIAL_STATE: IAppState = {
   assets: [],
   showModal: false,
   pendingRequest: false,
-  result: null
+  result: null,
+  votes: null
 };
 
 function initWeb3(provider: any) {
@@ -194,7 +221,7 @@ class App extends React.Component<any, any> {
 
     const chainId = await web3.eth.chainId();
 
-    await this.setState({
+    this.setState({
       web3,
       provider,
       connected: true,
@@ -202,8 +229,18 @@ class App extends React.Component<any, any> {
       chainId,
       networkId
     });
+
+    await this.getAllVotes();
+
     await this.getAccountAssets();
   };
+
+  
+  public getAllVotes = async () => {
+    Object.keys(candidateName).forEach(async (candidate: string) => {
+      await this.getReceivedVotes(candidate);
+    });
+  }
 
   public subscribeProvider = async (provider: any) => {
     if (!provider.on) {
@@ -211,20 +248,30 @@ class App extends React.Component<any, any> {
     }
     provider.on("close", () => this.resetApp());
     provider.on("accountsChanged", async (accounts: string[]) => {
-      await this.setState({ address: accounts[0] });
+      this.setState({ address: accounts[0] });
       await this.getAccountAssets();
     });
     provider.on("chainChanged", async (chainId: number) => {
       const { web3 } = this.state;
+
+      if (!web3.eth) {
+        return;
+      }
+
       const networkId = await web3.eth.net.getId();
-      await this.setState({ chainId, networkId });
+      this.setState({ chainId, networkId });
       await this.getAccountAssets();
     });
 
     provider.on("networkChanged", async (networkId: number) => {
       const { web3 } = this.state;
+
+      if (!web3.eth) {
+        return;
+      }
+
       const chainId = await web3.eth.chainId();
-      await this.setState({ chainId, networkId });
+      this.setState({ chainId, networkId });
       await this.getAccountAssets();
     });
   };
@@ -267,12 +314,13 @@ class App extends React.Component<any, any> {
     this.setState({ fetching: true });
     try {
       // get account balances
-      const assets = await apiGetAccountAssets(address, chainId);
+      const assets = Number(chainId) !== BFA_MAINNET.chainId && Number(chainId) !== BFA_TESTNET.chainId ?
+        await apiGetAccountAssets(address, chainId) : null;
 
-      await this.setState({ fetching: false, assets });
+      this.setState({ fetching: false, assets });
     } catch (error) {
       console.error(error); // tslint:disable-line
-      await this.setState({ fetching: false });
+      this.setState({ fetching: false });
     }
   };
 
@@ -337,7 +385,7 @@ class App extends React.Component<any, any> {
     }
 
     // test message
-    const message = "My email is john@doe.com - 1537836206101";
+    const message = "My email is satoshi@inti.edu.ar";
 
     // hash message
     const hash = hashPersonalMessage(message);
@@ -385,7 +433,7 @@ class App extends React.Component<any, any> {
     }
 
     // test message
-    const message = "My email is john@doe.com - 1537836206101";
+    const message = "My email is satoshi@inti.edu.ar";
 
     // encode message (hex)
     const hexMsg = convertUtf8ToHex(message);
@@ -535,12 +583,74 @@ class App extends React.Component<any, any> {
 
   public resetApp = async () => {
     const { web3 } = this.state;
+    
+    this.web3Modal.clearCachedProvider();
+    this.setState({ ...INITIAL_STATE });
+
     if (web3 && web3.currentProvider && web3.currentProvider.close) {
       await web3.currentProvider.close();
     }
-    await this.web3Modal.clearCachedProvider();
-    this.setState({ ...INITIAL_STATE });
   };
+
+  public vote = async (candidate: string) => {
+    const { web3, address, chainId } = this.state;
+
+    try {
+      // open modal
+      this.toggleModal();
+
+      // toggle pending request indicator
+      this.setState({ pendingRequest: true });
+
+      // send transaction
+      const result = await vote(address, chainId, web3, candidate);
+      
+      // format displayed result
+      const formattedResult = {
+        action: "vote",
+        result
+      };
+
+      // display result
+      this.setState({
+        web3,
+        pendingRequest: false,
+        result: formattedResult || null
+      });
+    } catch (error) {
+      console.error(error); // tslint:disable-line
+      this.setState({ web3, pendingRequest: false, result: null });
+    }
+  };
+
+  public getReceivedVotes = async (candidate: string) => {
+    const { web3, address, chainId } = this.state;
+
+    try {
+      const result = await getReceivedVotes(address, chainId, web3, candidate) as number;
+
+      const votes: IVotes = {} as IVotes;
+
+      votes[candidate] = result;
+
+      this.setState((prevState: { votes: IVotes | null }) => ({
+        votes: {...prevState.votes, ...votes}
+      }));
+    } catch (error) {
+      console.error(error); // tslint:disable-line
+    }
+  };
+
+  public getVotes = (candidate: string): number => {
+    const { votes } = this.state;
+
+    if (votes && votes[candidate]) {
+      return votes[candidate];
+    }
+
+    return 0;
+  };
+
 
   public render = () => {
     const {
@@ -569,45 +679,71 @@ class App extends React.Component<any, any> {
                   <Loader />
                 </SContainer>
               </Column>
-            ) : !!assets && !!assets.length ? (
-              <SBalances>
-                <h3>Actions</h3>
+            ) : connected ? (
+              <>
                 <Column center>
+                  <h3>Voting</h3>
+                  <p>Which 4IR technology do you think is going to be the most important and relevant?</p>
                   <STestButtonContainer>
-                    <STestButton left onClick={this.testSendTransaction}>
-                      {ETH_SEND_TRANSACTION}
-                    </STestButton>
-
-                    <STestButton left onClick={this.testSignMessage}>
-                      {ETH_SIGN}
-                    </STestButton>
-
-                    <STestButton left onClick={this.testSignPersonalMessage}>
-                      {PERSONAL_SIGN}
-                    </STestButton>
                     <STestButton
-                      left
-                      onClick={() => this.testContractCall(DAI_BALANCE_OF)}
+                      onClick={this.getAllVotes}
                     >
-                      {DAI_BALANCE_OF}
-                    </STestButton>
-
-                    <STestButton
-                      left
-                      onClick={() => this.testContractCall(DAI_TRANSFER)}
-                    >
-                      {DAI_TRANSFER}
-                    </STestButton>
-
-                    <STestButton left onClick={this.testOpenBox}>
-                      {BOX_GET_PROFILE}
+                      Update
                     </STestButton>
                   </STestButtonContainer>
+                  
+                  <ul>
+                  {Object.keys(candidateName).map(
+                    candidate => <STestButtonContainer key={candidate}>
+                      <a>{candidateName[candidate]}: {this.getVotes(candidate)}</a>
+                      <VoteButton
+                        onClick={() => this.vote(candidate)}
+                      >
+                        Vote
+                      </VoteButton>
+                    </STestButtonContainer>
+                  )}
+                  </ul>
                 </Column>
-                <h3>Balances</h3>
-                <AccountAssets chainId={chainId} assets={assets} />{" "}
-              </SBalances>
-            ) : (
+                {!!assets && !!assets.length && (<SBalances>
+                  <h3>Actions</h3>
+                  <Column center>
+                    <STestButtonContainer>
+                      <STestButton left onClick={this.testSendTransaction}>
+                        {ETH_SEND_TRANSACTION}
+                      </STestButton>
+
+                      <STestButton left onClick={this.testSignMessage}>
+                        {ETH_SIGN}
+                      </STestButton>
+
+                      <STestButton left onClick={this.testSignPersonalMessage}>
+                        {PERSONAL_SIGN}
+                      </STestButton>
+                      <STestButton
+                        left
+                        onClick={() => this.testContractCall(DAI_BALANCE_OF)}
+                      >
+                        {DAI_BALANCE_OF}
+                      </STestButton>
+
+                      <STestButton
+                        left
+                        onClick={() => this.testContractCall(DAI_TRANSFER)}
+                      >
+                        {DAI_TRANSFER}
+                      </STestButton>
+
+                      <STestButton left onClick={this.testOpenBox}>
+                        {BOX_GET_PROFILE}
+                      </STestButton>
+                    </STestButtonContainer>
+                  </Column>
+                  <h3>Balances</h3>
+                  <AccountAssets chainId={chainId} assets={assets} />{" "}
+                </SBalances>
+                )}
+              </>) : (
               <SLanding center>
                 <h3>{`Test Web3Modal`}</h3>
                 <ConnectButton onClick={this.onConnect} />

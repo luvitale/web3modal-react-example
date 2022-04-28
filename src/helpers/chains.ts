@@ -1,5 +1,10 @@
 import { IChainData } from "./types";
 
+import { getChain } from "@inti-ar/evm-chains";
+
+export const BFA_MAINNET = getChain(200941592);
+export const BFA_TESTNET = getChain(99118822);
+
 const supportedChains: IChainData[] = [
   {
     name: "Ethereum Mainnet",
@@ -72,10 +77,26 @@ const supportedChains: IChainData[] = [
     network: "mainnet",
     chain_id: 30,
     network_id: 30,
-    rpc_url: "https://public-node.rsk.co",
+    rpc_url: getChain(30).rpc[0],
     native_currency: {
-      symbol: "RSK",
-      name: "RSK",
+      symbol: "RBTC",
+      name: "Smart Bitcoin",
+      decimals: "18",
+      contractAddress: "",
+      balance: ""
+    }
+  },
+  {
+    name: "RSK Testnet",
+    short_name: "rskt",
+    chain: "RSK",
+    network: "testnet",
+    chain_id: 31,
+    network_id: 31,
+    rpc_url: getChain(31).rpc[0],
+    native_currency: {
+      symbol: "tRBTC",
+      name: "Smart Bitcoin Testnet",
       decimals: "18",
       contractAddress: "",
       balance: ""
@@ -106,7 +127,7 @@ const supportedChains: IChainData[] = [
     network_id: 1,
     rpc_url: "https://ethereumclassic.network",
     native_currency: {
-      symbol: "ETH",
+      symbol: "ETC",
       name: "Ethereum",
       decimals: "18",
       contractAddress: "",
@@ -192,7 +213,39 @@ const supportedChains: IChainData[] = [
       contractAddress: "",
       balance: ""
     }
-  }
+  },
+  {
+    name: "Blockchain Federal Argentina",
+    short_name: BFA_MAINNET.shortName,
+    chain: BFA_MAINNET.chain,
+    network:  BFA_MAINNET.network,
+    chain_id: BFA_MAINNET.chainId,
+    network_id: BFA_MAINNET.networkId,
+    rpc_url: BFA_MAINNET.rpc[0],
+    native_currency: {
+      symbol: BFA_MAINNET.nativeCurrency.symbol,
+      name: BFA_MAINNET.nativeCurrency.name,
+      decimals: BFA_MAINNET.nativeCurrency.decimals.toString(),
+      contractAddress: "",
+      balance: ""
+    }
+  },
+  {
+    name: "Blockchain Federal Argentina Testnet",
+    short_name: BFA_TESTNET.shortName,
+    chain: BFA_TESTNET.chain,
+    network:  BFA_TESTNET.network,
+    chain_id: BFA_TESTNET.chainId,
+    network_id: BFA_TESTNET.networkId,
+    rpc_url: BFA_TESTNET.rpc[0],
+    native_currency: {
+      symbol: BFA_TESTNET.nativeCurrency.symbol,
+      name: BFA_TESTNET.nativeCurrency.name,
+      decimals: BFA_TESTNET.nativeCurrency.decimals.toString(),
+      contractAddress: "",
+      balance: ""
+    }
+  },
 ];
 
 export default supportedChains;
